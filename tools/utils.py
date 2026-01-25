@@ -1,7 +1,31 @@
 from itertools import groupby
 
+import soundfile as sf
 import torch
+import torchaudio
 import torchaudio.functional as F
+
+
+def load_audio(wav_path, rate: int = None, offset: float = 0, duration: float = None):
+    with sf.SoundFile(wav_path) as f:
+        start_frame = int(offset * f.samplerate)
+        if duration is None:
+            frames_to_read = f.frames - start_frame
+        else:
+            frames_to_read = int(duration * f.samplerate)
+        f.seek(start_frame)
+        audio_data = f.read(frames_to_read, dtype="float32")
+    audio_tensor = torch.from_numpy(audio_data)
+    if rate is not None and f.samplerate != rate:
+        if audio_tensor.ndim == 1:
+            audio_tensor = audio_tensor.unsqueeze(0)
+        else:
+            audio_tensor = audio_tensor.T
+        resampler = torchaudio.transforms.Resample(orig_freq=f.samplerate, new_freq=rate)
+        audio_tensor = resampler(audio_tensor)
+        if audio_tensor.shape[0] == 1:
+            audio_tensor = audio_tensor.squeeze(0)
+    return audio_tensor, rate if rate is not None else f.samplerate
 
 
 def forced_align(log_probs: torch.Tensor, targets: torch.Tensor, blank: int = 0):
